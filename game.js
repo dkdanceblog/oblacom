@@ -21,7 +21,15 @@ const W = canvas.width;
 const H = canvas.height;
 
 const TARGET_FRAME_MS = 1000 / 60;
+
+// На некоторых Android игра визуально ускорялась из-за особенностей RAF/частоты экрана.
+// Поэтому Android получает отдельный мягкий множитель скорости.
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const GAME_SPEED = IS_ANDROID ? 0.56 : 1;
+
 let lastFrameTime = 0;
+let frameAccumulator = 0;
+let loopStarted = false;
 
 const ASSET_PATHS = {
   bg: 'assets/background.png',
@@ -130,6 +138,8 @@ function activateLikeBonus() {
 
 function init() {
   state = 'menu';
+  if (loopStarted) return;
+  loopStarted = true;
   requestAnimationFrame(loop);
 }
 
@@ -727,15 +737,22 @@ function loop(timestamp = 0) {
   requestAnimationFrame(loop);
 
   if (!lastFrameTime) lastFrameTime = timestamp;
-  const delta = timestamp - lastFrameTime;
 
-  // Физика игры считается максимум 60 раз в секунду.
-  // Это убирает ускорение на Android-экранах 90/120 Гц.
-  if (delta < TARGET_FRAME_MS) return;
+  let delta = timestamp - lastFrameTime;
+  lastFrameTime = timestamp;
 
-  lastFrameTime = timestamp - (delta % TARGET_FRAME_MS);
+  // защита после сворачивания вкладки
+  delta = Math.min(delta, 50);
 
-  update();
+  // на Android намеренно замедляем физику, чтобы она не летела в 2 раза быстрее
+  frameAccumulator += delta * GAME_SPEED;
+
+  let steps = 0;
+  while (frameAccumulator >= TARGET_FRAME_MS && steps < 3) {
+    update();
+    frameAccumulator -= TARGET_FRAME_MS;
+    steps++;
+  }
 
   if (state === 'loading') drawLoading();
   if (state === 'menu') drawMenu();
