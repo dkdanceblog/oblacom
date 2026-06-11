@@ -20,6 +20,9 @@ function startMusic() {
 const W = canvas.width;
 const H = canvas.height;
 
+const TARGET_FRAME_MS = 1000 / 60;
+let lastFrameTime = 0;
+
 const ASSET_PATHS = {
   bg: 'assets/background.png',
   start: 'assets/start.png',
@@ -64,9 +67,7 @@ let bolts = [];
 let milestoneText = null;
 let boostReadyFlash = 0;
 let touchStartX = null;
-let touchTargetX = null;
-let isTouching = false;
-let touchDir = 0;
+let touchControlDir = 0;
 
 let score = 0;
 let likes = 0;
@@ -277,13 +278,13 @@ function update() {
   const left = keys.ArrowLeft || keys.KeyA;
   const right = keys.ArrowRight || keys.KeyD;
 
-  // На телефоне — не тянем персонажа к пальцу.
-  // Android из-за частых pointermove давал дерготню, поэтому тач работает как мягкие кнопки:
-  // держишь левую половину — плавно летит влево, правую — вправо.
-  if (isTouching) {
-    player.vx += touchDir * 0.48;
-    player.vx *= 0.90;
-    player.vx = clamp(player.vx, -5.4, 5.4);
+  // Стабильное мобильное управление:
+  // держишь левую половину экрана — плавно летит влево,
+  // держишь правую — плавно летит вправо.
+  if (touchControlDir !== 0) {
+    player.vx += touchControlDir * 0.62;
+    player.vx *= 0.89;
+    player.vx = clamp(player.vx, -6.2, 6.2);
   } else {
     if (left) player.vx -= 0.9;
     if (right) player.vx += 0.9;
@@ -722,7 +723,18 @@ function drawLoading() {
   ctx.fillText('загрузка...', 120, 340);
 }
 
-function loop() {
+function loop(timestamp = 0) {
+  requestAnimationFrame(loop);
+
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  const delta = timestamp - lastFrameTime;
+
+  // Физика игры считается максимум 60 раз в секунду.
+  // Это убирает ускорение на Android-экранах 90/120 Гц.
+  if (delta < TARGET_FRAME_MS) return;
+
+  lastFrameTime = timestamp - (delta % TARGET_FRAME_MS);
+
   update();
 
   if (state === 'loading') drawLoading();
@@ -730,8 +742,6 @@ function loop() {
   if (state === 'play') drawGame();
   if (state === 'over') drawOver();
   if (state === 'final') drawFinal();
-
-  requestAnimationFrame(loop);
 }
 
 window.addEventListener('keydown', e => {
@@ -768,45 +778,29 @@ canvas.addEventListener('pointerdown', e => {
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) / r.width * W;
 
+  // Просто левая/правая половина экрана. Без слежения за пальцем.
+  touchControlDir = x < W / 2 ? -1 : 1;
   touchStartX = e.clientX;
-  touchTargetX = x;
-  isTouching = true;
-
-  // Мягкое управление для Android: левая/правая половина экрана.
-  // В центре есть мёртвая зона, чтобы персонаж не дёргался.
-  const deadZone = W * 0.08;
-  const center = W / 2;
-  if (x < center - deadZone) touchDir = -1;
-  else if (x > center + deadZone) touchDir = 1;
-  else touchDir = 0;
 
   canvas.setPointerCapture(e.pointerId);
 });
 
 canvas.addEventListener('pointermove', e => {
-  if (state !== 'play' || !isTouching) return;
+  if (state !== 'play') return;
 
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) / r.width * W;
-  touchTargetX = x;
 
-  const deadZone = W * 0.08;
-  const center = W / 2;
-  if (x < center - deadZone) touchDir = -1;
-  else if (x > center + deadZone) touchDir = 1;
-  else touchDir = 0;
+  // Можно перевести палец на другую половину — направление изменится.
+  touchControlDir = x < W / 2 ? -1 : 1;
 });
 
 canvas.addEventListener('pointerup', () => {
+  touchControlDir = 0;
   touchStartX = null;
-  touchTargetX = null;
-  isTouching = false;
-  touchDir = 0;
 });
 
 canvas.addEventListener('pointercancel', () => {
+  touchControlDir = 0;
   touchStartX = null;
-  touchTargetX = null;
-  isTouching = false;
-  touchDir = 0;
 });
