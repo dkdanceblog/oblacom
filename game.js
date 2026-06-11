@@ -23,7 +23,7 @@ const H = canvas.height;
 const TARGET_FRAME_MS = 1000 / 60;
 
 // Нормализация скорости: физика не зависит от 60/90/120 Гц.
-// Никакой искусственной Android/iPhone-замедленности.
+// Управление отдельно сглаживается по целевой позиции пальца.
 let lastFrameTime = 0;
 let loopStarted = false;
 
@@ -73,7 +73,9 @@ let bolts = [];
 let milestoneText = null;
 let boostReadyFlash = 0;
 let touchStartX = null;
-let touchControlDir = 0;
+let touchTargetX = null;
+let isTouching = false;
+let lastTouchX = null;
 
 let score = 0;
 let likes = 0;
@@ -157,6 +159,9 @@ function makePlatform(x, y, type = 'normal') {
 
 function reset() {
   state = 'play';
+  lastFrameTime = 0;
+  isTouching = false;
+  touchTargetX = null;
 
   score = 0;
   likes = 0;
@@ -286,13 +291,14 @@ function update(dt = 1) {
   const left = keys.ArrowLeft || keys.KeyA;
   const right = keys.ArrowRight || keys.KeyD;
 
-  // Стабильное мобильное управление:
-  // держишь левую половину экрана — плавно летит влево,
-  // держишь правую — плавно летит вправо.
-  if (touchControlDir !== 0) {
-    player.vx += touchControlDir * 0.62 * dt;
-    player.vx *= Math.pow(0.89, dt);
-    player.vx = clamp(player.vx, -6.2, 6.2);
+  if (isTouching && touchTargetX !== null) {
+    // Как в первых версиях: палец задаёт позицию.
+    // Но теперь не рывок, а плавное приближение к цели.
+    const center = player.x + player.w / 2;
+    const diff = touchTargetX - center;
+    const desiredVx = clamp(diff * 0.035, -7.8, 7.8);
+    const follow = 1 - Math.pow(0.78, dt);
+    player.vx += (desiredVx - player.vx) * follow;
   } else {
     if (left) player.vx -= 0.9 * dt;
     if (right) player.vx += 0.9 * dt;
@@ -810,11 +816,9 @@ function loop(timestamp = 0) {
   let delta = timestamp - lastFrameTime;
   lastFrameTime = timestamp;
 
-  // нормализованный шаг: 1 = обычный 60 FPS кадр
-  let dt = delta / TARGET_FRAME_MS;
-
-  // защита от рывков после сворачивания вкладки
-  dt = clamp(dt, 0.25, 1.5);
+  // 1 = один кадр на 60 FPS.
+  // Ограничиваем только экстремальные скачки после сворачивания.
+  let dt = clamp(delta / TARGET_FRAME_MS, 0.25, 1.35);
 
   update(dt);
 
@@ -828,17 +832,16 @@ function loop(timestamp = 0) {
 
 window.addEventListener('keydown', e => {
   startMusic();
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
 
   if (e.code === 'Escape' || e.code === 'KeyP') {
     if (state === 'play') {
       state = 'pause';
-      lastFrameTime = 0;
       bgMusic.pause();
       return;
     }
     if (state === 'pause') {
       state = 'play';
-      lastFrameTime = 0;
       if (musicStarted) bgMusic.play().catch(() => {});
       return;
     }
@@ -880,6 +883,7 @@ canvas.addEventListener('pointerdown', e => {
     }
     if (action === 'restart') {
       reset();
+      lastFrameTime = 0;
       if (musicStarted) bgMusic.play().catch(() => {});
       return;
     }
@@ -888,6 +892,7 @@ canvas.addEventListener('pointerdown', e => {
 
   if (state === 'play' && pauseHit(x, y)) {
     state = 'pause';
+    lastFrameTime = 0;
     bgMusic.pause();
     return;
   }
@@ -899,29 +904,32 @@ canvas.addEventListener('pointerdown', e => {
 
   if (state === 'menu' || state === 'over') reset();
 
-  // Просто левая/правая половина экрана. Без слежения за пальцем.
-  touchControlDir = x < W / 2 ? -1 : 1;
+  isTouching = true;
   touchStartX = e.clientX;
+  lastTouchX = e.clientX;
+  touchTargetX = x;
 
   canvas.setPointerCapture(e.pointerId);
 });
 
 canvas.addEventListener('pointermove', e => {
-  if (state !== 'play') return;
+  if (state !== 'play' || !isTouching) return;
 
   const r = canvas.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width * W;
-
-  // Можно перевести палец на другую половину — направление изменится.
-  touchControlDir = x < W / 2 ? -1 : 1;
+  touchTargetX = (e.clientX - r.left) / r.width * W;
+  lastTouchX = e.clientX;
 });
 
 canvas.addEventListener('pointerup', () => {
-  touchControlDir = 0;
+  isTouching = false;
   touchStartX = null;
+  lastTouchX = null;
+  touchTargetX = null;
 });
 
 canvas.addEventListener('pointercancel', () => {
-  touchControlDir = 0;
+  isTouching = false;
   touchStartX = null;
+  lastTouchX = null;
+  touchTargetX = null;
 });
