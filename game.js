@@ -64,6 +64,7 @@ let bolts = [];
 let milestoneText = null;
 let boostReadyFlash = 0;
 let touchStartX = null;
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 let score = 0;
 let likes = 0;
@@ -278,7 +279,7 @@ function update() {
   if (right) player.vx += 0.9;
 
   player.vx *= 0.88;
-  player.vx = clamp(player.vx, -10.5, 10.5);
+  player.vx = clamp(player.vx, IS_MOBILE ? -6.5 : -10.5, IS_MOBILE ? 6.5 : 10.5);
 
   player.x += player.vx;
   player.vy += 0.45;
@@ -763,13 +764,13 @@ canvas.addEventListener('pointermove', e => {
   const x = (e.clientX - r.left) / r.width * W;
 
   // точное ведение за пальцем
-  player.vx += (x - (player.x + player.w / 2)) * 0.018;
+  player.vx += (x - (player.x + player.w / 2)) * (IS_MOBILE ? 0.008 : 0.018);
 
   // быстрые свайпы дают понятный импульс
   if (touchStartX !== null) {
     const dx = e.clientX - touchStartX;
     if (Math.abs(dx) > 22) {
-      player.vx += dx > 0 ? 3.0 : -3.0;
+      player.vx += dx > 0 ? (IS_MOBILE ? 1.2 : 3.0) : (IS_MOBILE ? -1.2 : -3.0);
       touchStartX = e.clientX;
     }
   }
