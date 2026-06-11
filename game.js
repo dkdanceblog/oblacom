@@ -66,6 +66,7 @@ let boostReadyFlash = 0;
 let touchStartX = null;
 let touchTargetX = null;
 let isTouching = false;
+let touchDir = 0;
 
 let score = 0;
 let likes = 0;
@@ -276,19 +277,19 @@ function update() {
   const left = keys.ArrowLeft || keys.KeyA;
   const right = keys.ArrowRight || keys.KeyD;
 
-  if (left) player.vx -= 0.9;
-  if (right) player.vx += 0.9;
-
-  // Android fix: палец задаёт цель, а персонаж плавно догоняет её.
-  // Так управление остаётся точным, но без резких рывков.
-  if (isTouching && touchTargetX !== null) {
-    const center = player.x + player.w / 2;
-    const diff = touchTargetX - center;
-    player.vx += clamp(diff * 0.006, -0.55, 0.55);
+  // На телефоне — не тянем персонажа к пальцу.
+  // Android из-за частых pointermove давал дерготню, поэтому тач работает как мягкие кнопки:
+  // держишь левую половину — плавно летит влево, правую — вправо.
+  if (isTouching) {
+    player.vx += touchDir * 0.48;
+    player.vx *= 0.90;
+    player.vx = clamp(player.vx, -5.4, 5.4);
+  } else {
+    if (left) player.vx -= 0.9;
+    if (right) player.vx += 0.9;
+    player.vx *= 0.88;
+    player.vx = clamp(player.vx, -10.5, 10.5);
   }
-
-  player.vx *= 0.84;
-  player.vx = clamp(player.vx, -7.2, 7.2);
 
   player.x += player.vx;
   player.vy += 0.45;
@@ -765,37 +766,47 @@ canvas.addEventListener('pointerdown', e => {
   if (state === 'menu' || state === 'over') reset();
 
   const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * W;
+
   touchStartX = e.clientX;
-  touchTargetX = (e.clientX - r.left) / r.width * W;
+  touchTargetX = x;
   isTouching = true;
+
+  // Мягкое управление для Android: левая/правая половина экрана.
+  // В центре есть мёртвая зона, чтобы персонаж не дёргался.
+  const deadZone = W * 0.08;
+  const center = W / 2;
+  if (x < center - deadZone) touchDir = -1;
+  else if (x > center + deadZone) touchDir = 1;
+  else touchDir = 0;
 
   canvas.setPointerCapture(e.pointerId);
 });
 
 canvas.addEventListener('pointermove', e => {
-  if (state !== 'play') return;
+  if (state !== 'play' || !isTouching) return;
 
   const r = canvas.getBoundingClientRect();
-  touchTargetX = (e.clientX - r.left) / r.width * W;
+  const x = (e.clientX - r.left) / r.width * W;
+  touchTargetX = x;
 
-  // Свайп даёт лёгкий импульс, но без бешеного разгона на Android.
-  if (touchStartX !== null) {
-    const dx = e.clientX - touchStartX;
-    if (Math.abs(dx) > 34) {
-      player.vx += dx > 0 ? 0.9 : -0.9;
-      touchStartX = e.clientX;
-    }
-  }
+  const deadZone = W * 0.08;
+  const center = W / 2;
+  if (x < center - deadZone) touchDir = -1;
+  else if (x > center + deadZone) touchDir = 1;
+  else touchDir = 0;
 });
 
 canvas.addEventListener('pointerup', () => {
   touchStartX = null;
   touchTargetX = null;
   isTouching = false;
+  touchDir = 0;
 });
 
 canvas.addEventListener('pointercancel', () => {
   touchStartX = null;
   touchTargetX = null;
   isTouching = false;
+  touchDir = 0;
 });

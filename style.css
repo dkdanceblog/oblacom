@@ -12,3 +12,5 @@ canvas {
 }
 #hint { color:#cbd7ff; font-size:12px; opacity:.8; }
 @media (max-height:740px){ #hint{display:none} }
+
+* { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
