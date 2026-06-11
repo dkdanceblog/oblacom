@@ -1,4 +1,14 @@
-# обла.ком
-
-
-Обновление: чёрные тучи падают сразу после первого касания, буквы убраны, добавлен лёгкий туман, края экрана больше не дают бесконечно спасаться.
+html, body { margin:0; height:100%; background:#0b1240; overflow:hidden; font-family: system-ui, sans-serif; }
+#wrap { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+canvas {
+  width: min(100vw, calc((100vh - 28px) * 9 / 16), 720px);
+  height: auto;
+  aspect-ratio: 9 / 16;
+  image-rendering: pixelated;
+  border-radius: 18px;
+  box-shadow: 0 20px 70px rgba(0,0,0,.45);
+  background: #141a58;
+  touch-action: none;
+}
+#hint { color:#cbd7ff; font-size:12px; opacity:.8; }
+@media (max-height:740px){ #hint{display:none} }
