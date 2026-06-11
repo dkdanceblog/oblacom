@@ -20,10 +20,6 @@ function startMusic() {
 const W = canvas.width;
 const H = canvas.height;
 
-document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-
-
 const ASSET_PATHS = {
   bg: 'assets/background.png',
   start: 'assets/start.png',
@@ -68,7 +64,8 @@ let bolts = [];
 let milestoneText = null;
 let boostReadyFlash = 0;
 let touchStartX = null;
-const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+let touchTargetX = null;
+let isTouching = false;
 
 let score = 0;
 let likes = 0;
@@ -83,7 +80,7 @@ const CLOUD_H = 80;
 const LIKE_SIZE = 48;
 
 const START_Y = 990;
-const FINISH_SCORE = 200000;
+const FINISH_SCORE = 1000000;
 
 const player = {
   x: W / 2 - PLAYER_BOX_W / 2,
@@ -282,8 +279,16 @@ function update() {
   if (left) player.vx -= 0.9;
   if (right) player.vx += 0.9;
 
-  player.vx *= 0.88;
-  player.vx = clamp(player.vx, IS_MOBILE ? -6.5 : -10.5, IS_MOBILE ? 6.5 : 10.5);
+  // Android fix: палец задаёт цель, а персонаж плавно догоняет её.
+  // Так управление остаётся точным, но без резких рывков.
+  if (isTouching && touchTargetX !== null) {
+    const center = player.x + player.w / 2;
+    const diff = touchTargetX - center;
+    player.vx += clamp(diff * 0.006, -0.55, 0.55);
+  }
+
+  player.vx *= 0.84;
+  player.vx = clamp(player.vx, -7.2, 7.2);
 
   player.x += player.vx;
   player.vy += 0.45;
@@ -751,13 +756,19 @@ window.addEventListener('keyup', e => {
 
 canvas.addEventListener('pointerdown', e => {
   startMusic();
+
   if (state === 'final') {
     state = 'menu';
     return;
   }
 
   if (state === 'menu' || state === 'over') reset();
+
+  const r = canvas.getBoundingClientRect();
   touchStartX = e.clientX;
+  touchTargetX = (e.clientX - r.left) / r.width * W;
+  isTouching = true;
+
   canvas.setPointerCapture(e.pointerId);
 });
 
@@ -765,16 +776,13 @@ canvas.addEventListener('pointermove', e => {
   if (state !== 'play') return;
 
   const r = canvas.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width * W;
+  touchTargetX = (e.clientX - r.left) / r.width * W;
 
-  // точное ведение за пальцем
-  player.vx += (x - (player.x + player.w / 2)) * (IS_MOBILE ? 0.008 : 0.018);
-
-  // быстрые свайпы дают понятный импульс
+  // Свайп даёт лёгкий импульс, но без бешеного разгона на Android.
   if (touchStartX !== null) {
     const dx = e.clientX - touchStartX;
-    if (Math.abs(dx) > 22) {
-      player.vx += dx > 0 ? (IS_MOBILE ? 1.2 : 3.0) : (IS_MOBILE ? -1.2 : -3.0);
+    if (Math.abs(dx) > 34) {
+      player.vx += dx > 0 ? 0.9 : -0.9;
       touchStartX = e.clientX;
     }
   }
@@ -782,4 +790,12 @@ canvas.addEventListener('pointermove', e => {
 
 canvas.addEventListener('pointerup', () => {
   touchStartX = null;
+  touchTargetX = null;
+  isTouching = false;
+});
+
+canvas.addEventListener('pointercancel', () => {
+  touchStartX = null;
+  touchTargetX = null;
+  isTouching = false;
 });
