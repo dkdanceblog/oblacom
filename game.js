@@ -79,7 +79,7 @@ const CLOUD_H = 80;
 const LIKE_SIZE = 48;
 
 const START_Y = 990;
-const FINISH_SCORE = 1000000;
+const FINISH_SCORE = 200000;
 
 const player = {
   x: W / 2 - PLAYER_BOX_W / 2,
