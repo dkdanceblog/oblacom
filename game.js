@@ -22,14 +22,9 @@ const H = canvas.height;
 
 const TARGET_FRAME_MS = 1000 / 60;
 
-// На некоторых Android игра визуально ускорялась из-за особенностей RAF/частоты экрана.
-// Поэтому Android получает отдельный мягкий множитель скорости.
-const IS_ANDROID = /Android/i.test(navigator.userAgent);
-const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-const GAME_SPEED = IS_ANDROID ? 0.72 : IS_IOS ? 1.08 : 1;
-
+// Нормализация скорости: физика не зависит от 60/90/120 Гц.
+// Никакой искусственной Android/iPhone-замедленности.
 let lastFrameTime = 0;
-let frameAccumulator = 0;
 let loopStarted = false;
 
 const PAUSE_BTN = { x: W - 86, y: 82, w: 56, h: 56 };
@@ -283,7 +278,7 @@ function hitPlatform(pl) {
   );
 }
 
-function update() {
+function update(dt = 1) {
   if (state !== 'play') return;
 
   player.prevY = player.y;
@@ -295,19 +290,19 @@ function update() {
   // держишь левую половину экрана — плавно летит влево,
   // держишь правую — плавно летит вправо.
   if (touchControlDir !== 0) {
-    player.vx += touchControlDir * 0.62;
-    player.vx *= 0.89;
+    player.vx += touchControlDir * 0.62 * dt;
+    player.vx *= Math.pow(0.89, dt);
     player.vx = clamp(player.vx, -6.2, 6.2);
   } else {
-    if (left) player.vx -= 0.9;
-    if (right) player.vx += 0.9;
-    player.vx *= 0.88;
+    if (left) player.vx -= 0.9 * dt;
+    if (right) player.vx += 0.9 * dt;
+    player.vx *= Math.pow(0.88, dt);
     player.vx = clamp(player.vx, -10.5, 10.5);
   }
 
-  player.x += player.vx;
-  player.vy += 0.45;
-  player.y += player.vy;
+  player.x += player.vx * dt;
+  player.vy += 0.45 * dt;
+  player.y += player.vy * dt;
 
   if (player.vx > 0.15) player.facing = 1;
   if (player.vx < -0.15) player.facing = -1;
@@ -346,14 +341,14 @@ function update() {
   // Чёрная туча падает сразу после первого касания
   for (const pl of platforms) {
     if (pl.falling) {
-      pl.fallVy += 0.45;
-      pl.y += pl.fallVy;
-      pl.alpha -= 0.018;
+      pl.fallVy += 0.45 * dt;
+      pl.y += pl.fallVy * dt;
+      pl.alpha -= 0.018 * dt;
     }
   }
 
   for (const b of bolts) {
-    b.life--;
+    b.life -= dt;
     if (b.life < 128) {
       const sx = b.x - 10;
       const sy = b.y - cameraY;
@@ -369,7 +364,7 @@ function update() {
   if (boostReadyFlash > 0) boostReadyFlash--;
 
   for (const o of pickups) {
-    o.float += 0.08;
+    o.float += 0.08 * dt;
     const oy = o.y + Math.sin(o.float) * 5;
 
     if (
@@ -388,10 +383,10 @@ function update() {
 
 
   for (const pt of particles) {
-    pt.x += pt.vx;
-    pt.y += pt.vy;
-    pt.vy += 0.08;
-    pt.life--;
+    pt.x += pt.vx * dt;
+    pt.y += pt.vy * dt;
+    pt.vy += 0.08 * dt;
+    pt.life -= dt;
   }
   particles = particles.filter(p => p.life > 0);
 
@@ -409,7 +404,7 @@ function update() {
   }
 
   if (milestoneText) {
-    milestoneText.life--;
+    milestoneText.life -= dt;
     if (milestoneText.life <= 0) milestoneText = null;
   }
 
@@ -556,7 +551,7 @@ function drawBolts() {
     const y = b.y - cameraY;
 
     if (b.warning > 0) {
-      b.warning--;
+      b.warning -= dt;
       ctx.globalAlpha = 0.45;
       ctx.strokeStyle = '#ff78d7';
       ctx.lineWidth = 3;
@@ -815,18 +810,13 @@ function loop(timestamp = 0) {
   let delta = timestamp - lastFrameTime;
   lastFrameTime = timestamp;
 
-  // защита после сворачивания вкладки
-  delta = Math.min(delta, 50);
+  // нормализованный шаг: 1 = обычный 60 FPS кадр
+  let dt = delta / TARGET_FRAME_MS;
 
-  // на Android намеренно замедляем физику, чтобы она не летела в 2 раза быстрее
-  frameAccumulator += delta * GAME_SPEED;
+  // защита от рывков после сворачивания вкладки
+  dt = clamp(dt, 0.25, 1.5);
 
-  let steps = 0;
-  while (frameAccumulator >= TARGET_FRAME_MS && steps < 3) {
-    update();
-    frameAccumulator -= TARGET_FRAME_MS;
-    steps++;
-  }
+  update(dt);
 
   if (state === 'loading') drawLoading();
   if (state === 'menu') drawMenu();
@@ -842,11 +832,13 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.code === 'KeyP') {
     if (state === 'play') {
       state = 'pause';
+      lastFrameTime = 0;
       bgMusic.pause();
       return;
     }
     if (state === 'pause') {
       state = 'play';
+      lastFrameTime = 0;
       if (musicStarted) bgMusic.play().catch(() => {});
       return;
     }
@@ -882,6 +874,7 @@ canvas.addEventListener('pointerdown', e => {
     const action = pauseMenuHit(x, y);
     if (action === 'continue') {
       state = 'play';
+      lastFrameTime = 0;
       if (musicStarted) bgMusic.play().catch(() => {});
       return;
     }
