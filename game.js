@@ -25,11 +25,14 @@ const TARGET_FRAME_MS = 1000 / 60;
 // На некоторых Android игра визуально ускорялась из-за особенностей RAF/частоты экрана.
 // Поэтому Android получает отдельный мягкий множитель скорости.
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
-const GAME_SPEED = IS_ANDROID ? 0.56 : 1;
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const GAME_SPEED = IS_ANDROID ? 0.72 : IS_IOS ? 1.08 : 1;
 
 let lastFrameTime = 0;
 let frameAccumulator = 0;
 let loopStarted = false;
+
+const PAUSE_BTN = { x: W - 86, y: 82, w: 56, h: 56 };
 
 const ASSET_PATHS = {
   bg: 'assets/background.png',
@@ -603,6 +606,76 @@ function drawMilestone() {
   ctx.restore();
 }
 
+
+function drawPauseButton() {
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = 'rgba(9,15,54,.70)';
+  ctx.fillRect(PAUSE_BTN.x, PAUSE_BTN.y, PAUSE_BTN.w, PAUSE_BTN.h);
+  ctx.strokeStyle = 'rgba(255,255,255,.85)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(PAUSE_BTN.x, PAUSE_BTN.y, PAUSE_BTN.w, PAUSE_BTN.h);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(PAUSE_BTN.x + 17, PAUSE_BTN.y + 13, 8, 30);
+  ctx.fillRect(PAUSE_BTN.x + 32, PAUSE_BTN.y + 13, 8, 30);
+  ctx.restore();
+}
+
+function drawPause() {
+  drawGame();
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,10,40,.78)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = '56px monospace';
+  ctx.fillText('ПАУЗА', W / 2, H * 0.38);
+
+  const bw = 360;
+  const bh = 82;
+  const bx = W / 2 - bw / 2;
+  const by1 = H * 0.47;
+  const by2 = by1 + 112;
+
+  ctx.fillStyle = '#ec64b9';
+  ctx.fillRect(bx, by1, bw, bh);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(bx, by1, bw, bh);
+  ctx.fillStyle = '#fff';
+  ctx.font = '34px monospace';
+  ctx.fillText('ПРОДОЛЖИТЬ', W / 2, by1 + 53);
+
+  ctx.fillStyle = 'rgba(9,15,54,.85)';
+  ctx.fillRect(bx, by2, bw, bh);
+  ctx.strokeStyle = '#fff';
+  ctx.strokeRect(bx, by2, bw, bh);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('ЗАНОВО', W / 2, by2 + 53);
+
+  ctx.restore();
+}
+
+function pauseHit(x, y) {
+  return x >= PAUSE_BTN.x && x <= PAUSE_BTN.x + PAUSE_BTN.w &&
+         y >= PAUSE_BTN.y && y <= PAUSE_BTN.y + PAUSE_BTN.h;
+}
+
+function pauseMenuHit(x, y) {
+  const bw = 360;
+  const bh = 82;
+  const bx = W / 2 - bw / 2;
+  const by1 = H * 0.47;
+  const by2 = by1 + 112;
+
+  if (x >= bx && x <= bx + bw && y >= by1 && y <= by1 + bh) return 'continue';
+  if (x >= bx && x <= bx + bw && y >= by2 && y <= by2 + bh) return 'restart';
+  return null;
+}
+
 function drawHud() {
   ctx.fillStyle = 'rgba(9,15,54,.86)';
   ctx.fillRect(0, 0, W, 70);
@@ -643,6 +716,7 @@ function drawGame() {
 
   drawMilestone();
   drawHud();
+  drawPauseButton();
 }
 
 function drawMenu() {
@@ -758,11 +832,26 @@ function loop(timestamp = 0) {
   if (state === 'menu') drawMenu();
   if (state === 'play') drawGame();
   if (state === 'over') drawOver();
+  if (state === 'pause') drawPause();
   if (state === 'final') drawFinal();
 }
 
 window.addEventListener('keydown', e => {
   startMusic();
+
+  if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (state === 'play') {
+      state = 'pause';
+      bgMusic.pause();
+      return;
+    }
+    if (state === 'pause') {
+      state = 'play';
+      if (musicStarted) bgMusic.play().catch(() => {});
+      return;
+    }
+  }
+
   keys[e.code] = true;
 
   if ((e.code === 'Space' || e.code === 'Enter') && state === 'final') {
@@ -785,15 +874,37 @@ window.addEventListener('keyup', e => {
 canvas.addEventListener('pointerdown', e => {
   startMusic();
 
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * W;
+  const y = (e.clientY - r.top) / r.height * H;
+
+  if (state === 'pause') {
+    const action = pauseMenuHit(x, y);
+    if (action === 'continue') {
+      state = 'play';
+      if (musicStarted) bgMusic.play().catch(() => {});
+      return;
+    }
+    if (action === 'restart') {
+      reset();
+      if (musicStarted) bgMusic.play().catch(() => {});
+      return;
+    }
+    return;
+  }
+
+  if (state === 'play' && pauseHit(x, y)) {
+    state = 'pause';
+    bgMusic.pause();
+    return;
+  }
+
   if (state === 'final') {
     state = 'menu';
     return;
   }
 
   if (state === 'menu' || state === 'over') reset();
-
-  const r = canvas.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width * W;
 
   // Просто левая/правая половина экрана. Без слежения за пальцем.
   touchControlDir = x < W / 2 ? -1 : 1;
