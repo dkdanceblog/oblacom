@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>обла.ком</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="720" height="1280"></canvas>
+    <div id="hint">← → / A D или свайп по экрану</div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
