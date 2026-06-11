@@ -20,6 +20,10 @@ function startMusic() {
 const W = canvas.width;
 const H = canvas.height;
 
+document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+
 const ASSET_PATHS = {
   bg: 'assets/background.png',
   start: 'assets/start.png',
@@ -78,7 +82,7 @@ const CLOUD_H = 80;
 const LIKE_SIZE = 48;
 
 const START_Y = 990;
-const FINISH_SCORE = 1000000;
+const FINISH_SCORE = 200000;
 
 const player = {
   x: W / 2 - PLAYER_BOX_W / 2,
