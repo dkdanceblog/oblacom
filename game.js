@@ -4,17 +4,48 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const SFX = {
-  like: new Audio('assets/like.wav'),
-  slippers: new Audio('assets/slippers.wav'),
-  storm: new Audio('assets/storm.wav')
+  like: new Audio('assets/like.mp3'),
+  slippers: new Audio('assets/slippers.mp3'),
+  storm: new Audio('assets/storm.mp3')
 };
 
-SFX.like.volume = 0.06;
-SFX.slippers.volume = 0.08;
-SFX.storm.volume = 0.06;
+SFX.like.volume = 0.05;
+SFX.slippers.volume = 0.07;
+SFX.storm.volume = 0.05;
 
 for (const s of Object.values(SFX)) {
   s.preload = 'auto';
+  s.load();
+}
+
+let audioUnlocked = false;
+
+function unlockSfx() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+
+  // Мобильные браузеры иногда не дают SFX, пока каждый звук не был "разбужен"
+  // внутри пользовательского клика.
+  for (const s of Object.values(SFX)) {
+    try {
+      const oldVolume = s.volume;
+      s.volume = 0;
+      const p = s.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          s.pause();
+          s.currentTime = 0;
+          s.volume = oldVolume;
+        }).catch(() => {
+          s.volume = oldVolume;
+        });
+      } else {
+        s.pause();
+        s.currentTime = 0;
+        s.volume = oldVolume;
+      }
+    } catch (e) {}
+  }
 }
 
 function playSfx(sound) {
@@ -22,10 +53,14 @@ function playSfx(sound) {
     if (!sound || !sound.src) return;
     const clone = sound.cloneNode();
     clone.volume = sound.volume;
+    clone.preload = 'auto';
     const p = clone.play();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (e) {}
 }
+
+
+
 
 
 const bgMusic = new Audio('assets/audio.mp3');
@@ -34,6 +69,7 @@ bgMusic.volume = 0.10;
 
 let musicStarted = false;
 function startMusic() {
+  unlockSfx();
   if (musicStarted) return;
   musicStarted = true;
   bgMusic.play().catch(() => {
