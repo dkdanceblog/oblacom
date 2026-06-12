@@ -3,6 +3,31 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
+const SFX = {
+  like: new Audio('assets/like.wav'),
+  slippers: new Audio('assets/slippers.wav'),
+  storm: new Audio('assets/storm.wav')
+};
+
+SFX.like.volume = 0.06;
+SFX.slippers.volume = 0.08;
+SFX.storm.volume = 0.06;
+
+for (const s of Object.values(SFX)) {
+  s.preload = 'auto';
+}
+
+function playSfx(sound) {
+  try {
+    if (!sound || !sound.src) return;
+    const clone = sound.cloneNode();
+    clone.volume = sound.volume;
+    const p = clone.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (e) {}
+}
+
+
 const bgMusic = new Audio('assets/audio.mp3');
 bgMusic.loop = true;
 bgMusic.volume = 0.10;
@@ -34,6 +59,7 @@ const ASSET_PATHS = {
   start: 'assets/start.png',
   ending: 'assets/ending.png',
   like: 'assets/like.png',
+  slippers: 'assets/slippers.png',
 
   cloud1: 'assets/oblako usual.png',
   cloud2: 'assets/oblako usual 2.png',
@@ -67,6 +93,7 @@ let state = 'loading';
 let keys = {};
 let platforms = [];
 let pickups = [];
+let slippers = [];
 let letters = [];
 let particles = [];
 let bolts = [];
@@ -90,7 +117,7 @@ const CLOUD_H = 80;
 const LIKE_SIZE = 48;
 
 const START_Y = 990;
-const FINISH_SCORE = 1000000;
+const FINISH_SCORE = 200000;
 
 const player = {
   x: W / 2 - PLAYER_BOX_W / 2,
@@ -171,6 +198,7 @@ function reset() {
 
   platforms = [];
   pickups = [];
+  slippers = [];
   letters = [];
   particles = [];
   bolts = [];
@@ -249,6 +277,18 @@ function spawnPlatform(y, safe = false) {
       float: rnd(0, Math.PI * 2)
     });
   }
+  // Редкий бонус: тапочки. Подобрал — очень высокий прыжок.
+  if (!safe && type !== 'storm' && Math.random() < 0.055) {
+    slippers.push({
+      x: clamp(p.x + p.w / 2 - 24, 8, W - 56),
+      y: p.y - 54,
+      w: 48,
+      h: 48,
+      got: false,
+      float: rnd(0, Math.PI * 2)
+    });
+  }
+
 }
 
 function ensurePlatforms() {
@@ -260,6 +300,7 @@ function ensurePlatforms() {
 
   platforms = platforms.filter(p => p.y < cameraY + H + 180 && p.alpha > 0.02);
   pickups = pickups.filter(o => o.y < cameraY + H + 180 && !o.got);
+  slippers = slippers.filter(o => o.y < cameraY + H + 180 && !o.got);
 }
 
 function hitPlatform(pl) {
@@ -339,6 +380,7 @@ function update(dt = 1) {
         player.y = pl.y - player.h - 2;
         player.vy = -15.2;
 
+        playSfx(SFX.storm);
         pl.touchedAt = performance.now();
         pl.falling = true;
         pl.fallVy = 1.8;
@@ -397,10 +439,30 @@ function update(dt = 1) {
       player.y < oy + o.h
     ) {
       o.got = true;
+      playSfx(SFX.like);
       likes++;
       score += 250;
       activateLikeBonus();
       burst(o.x + o.w / 2, oy + o.h / 2, '#ff6bb7', 12);
+    }
+  }
+
+
+  for (const s of slippers) {
+    s.float += 0.06 * dt;
+    const sy = s.y + Math.sin(s.float) * 5;
+
+    if (
+      player.x + player.w > s.x &&
+      player.x < s.x + s.w &&
+      player.y + player.h > sy &&
+      player.y < sy + s.h
+    ) {
+      s.got = true;
+      player.vy = -26;
+      playSfx(SFX.slippers);
+      score += 1000;
+      burst(s.x + s.w / 2, sy + s.h / 2, '#ffe84a', 28);
     }
   }
 
@@ -540,6 +602,14 @@ function drawLike(o) {
   }
 }
 
+
+
+function drawSlippers(s) {
+  const y = s.y - cameraY + Math.sin(s.float) * 5;
+  if (img.slippers && img.slippers.complete) {
+    ctx.drawImage(img.slippers, s.x, y, s.w, s.h);
+  }
+}
 
 function drawFog() {
   ctx.save();
@@ -719,6 +789,7 @@ function drawGame() {
 
   for (const pl of platforms) drawPlatform(pl);
   for (const o of pickups) if (!o.got) drawLike(o);
+  for (const s of slippers) if (!s.got) drawSlippers(s);
   drawBolts();
 
   drawPlayer();
