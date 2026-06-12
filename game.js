@@ -334,11 +334,25 @@ function update(dt = 1) {
       }
 
       if (pl.type === 'storm' && pl.touchedAt === null) {
+        // Чёрная туча работает как платформа: игрок отскакивает,
+        // а уже сама туча падает вниз и оставляет молнию.
+        player.y = pl.y - player.h - 2;
+        player.vy = -15.2;
+
         pl.touchedAt = performance.now();
         pl.falling = true;
-        pl.fallVy = 2.5;
+        pl.fallVy = 1.8;
         player.onStorm = pl;
-        bolts.push({ x: pl.x + pl.w / 2, y: pl.y + 38, life: 150, warning: 22 });
+
+        // Молния появляется ниже тучи, не прямо в точке отскока,
+        // чтобы игрок не "исчезал" сразу после касания.
+        bolts.push({
+          x: pl.x + pl.w / 2,
+          y: pl.y + pl.h + 18,
+          life: 180,
+          warning: 38
+        });
+
         burst(pl.x + pl.w / 2, pl.y + 30, '#333655', 18);
       }
     }
@@ -347,20 +361,23 @@ function update(dt = 1) {
   // Чёрная туча падает сразу после первого касания
   for (const pl of platforms) {
     if (pl.falling) {
-      pl.fallVy += 0.45 * dt;
+      pl.fallVy += 0.32 * dt;
       pl.y += pl.fallVy * dt;
-      pl.alpha -= 0.018 * dt;
+      pl.alpha -= 0.014 * dt;
     }
   }
 
   for (const b of bolts) {
     b.life -= dt;
-    if (b.life < 128) {
-      const sx = b.x - 10;
+    if (b.warning > 0) b.warning -= dt;
+
+    if (b.warning <= 0) {
+      const sx = b.x - 12;
       const sy = b.y - cameraY;
       const px = player.x + player.w / 2;
       const py = player.y + player.h / 2 - cameraY;
-      if (px > sx - 10 && px < sx + 30 && py > sy && py < sy + 300) {
+
+      if (px > sx - 18 && px < sx + 42 && py > sy && py < sy + 330) {
         state = 'over';
       }
     }
@@ -557,7 +574,6 @@ function drawBolts() {
     const y = b.y - cameraY;
 
     if (b.warning > 0) {
-      b.warning -= dt;
       ctx.globalAlpha = 0.45;
       ctx.strokeStyle = '#ff78d7';
       ctx.lineWidth = 3;
